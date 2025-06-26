@@ -25,35 +25,20 @@ export const handleImport = async (req, res) => {
       leaveTime: row["Leave Time"] ? new Date(row["Leave Time"]) : null
     }));
 
-    let insertedCount = 0;
-    let duplicatesCount = 0;
+    // 3. Delete all existing attendees before inserting new ones
+    await Attendee.deleteMany({});
 
-    // 3. Insert only non-existing entries into MongoDB
-    for (const attendee of cleaned) {
-      const exists = await Attendee.exists({
-        email: attendee.email,
-        sessionMinutes: attendee.sessionMinutes,
-        firstName: attendee.firstName
-      });
+    // 4. Insert all new records
+    await Attendee.insertMany(cleaned);
 
-      if (!exists) {
-        await Attendee.create(attendee);
-        insertedCount++;
-      } else {
-        duplicatesCount++;
-      }
-    }
-
-    // 4. Delete the uploaded file
+    // 5. Delete the uploaded file
     fs.unlinkSync(req.file.path);
 
-    // 5. Response
+    // 6. Response
     res.status(200).json({
-      message: 'File processed successfully',
+      message: 'File processed successfully (all previous attendees deleted)',
       total: cleaned.length,
-      inserted: insertedCount,
-      // duplicates: duplicatesCount,
-      // totalUnique: cleaned.length - duplicatesCount
+      inserted: cleaned.length
     });
 
   } catch (err) {
