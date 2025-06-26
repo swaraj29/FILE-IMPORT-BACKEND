@@ -3,15 +3,16 @@ import fs from 'fs';
 import Attendee from '../models/Attendee.js';
 import cleanPhone from '../utils/cleanPhone.js';
 
-// ========== 1. IMPORT EXCEL FILE ===============
+// ========== 1. IMPORT EXCEL OR CSV FILE ===============
 export const handleImport = async (req, res) => {
   try {
-    // 1. Read the uploaded Excel file
-    const workbook = XLSX.readFile(req.file.path);
+    const filePath = req.file.path;
+    // Read the uploaded Excel or CSV file
+    const workbook = XLSX.readFile(filePath);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawData = XLSX.utils.sheet_to_json(sheet);
 
-    // 2. Clean and reformat the data
+    // Clean and reformat the data
     const cleaned = rawData.map(row => ({
       email: row.Email?.toLowerCase().trim(),
       firstName: row["First Name"]?.trim(),
@@ -25,20 +26,20 @@ export const handleImport = async (req, res) => {
       leaveTime: row["Leave Time"] ? new Date(row["Leave Time"]) : null
     }));
 
-    // 3. Delete all existing attendees before inserting new ones
+    // Delete all existing attendees before inserting new ones
     await Attendee.deleteMany({});
-
-    // 4. Insert all new records
     await Attendee.insertMany(cleaned);
 
-    // 5. Delete the uploaded file
-    fs.unlinkSync(req.file.path);
-
-    // 6. Response
+    // Respond to client first for speed
     res.status(200).json({
       message: 'File processed successfully (all previous attendees deleted)',
       total: cleaned.length,
       inserted: cleaned.length
+    });
+
+    // Delete the uploaded file asynchronously (non-blocking)
+    fs.unlink(filePath, err => {
+      if (err) console.error('Failed to delete file:', err);
     });
 
   } catch (err) {
@@ -58,7 +59,7 @@ export const getAllAttendees = async (req, res) => {
   }
 };
 
-// ========== 3. GET UNIQUE ATTENDEES BY EMAIL + SUM SESSION MINUTES ===============// ========== 3. GET UNIQUE ATTENDEES BY EMAIL + SUM SESSION MINUTES ===============
+// ========== 3. GET UNIQUE ATTENDEES BY EMAIL + SUM SESSION MINUTES ===============
 export const getUniqueAttendees = async (req, res) => {
   try {
     const all = await Attendee.find().lean();
@@ -85,7 +86,7 @@ export const getUniqueAttendees = async (req, res) => {
     // Convert map to array
     const unique = Array.from(emailMap.values());
 
-    // ✅ Sort by sessionMinutes descending
+    // Sort by sessionMinutes descending
     unique.sort((a, b) => b.sessionMinutes - a.sessionMinutes);
 
     res.json({
